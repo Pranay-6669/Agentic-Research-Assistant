@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RepoGuide AI</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; line-height: 1.6; color: #333; background: #f9f9f9; }
+        .container { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1 { margin-bottom: 5px; color: #1a1a1a; }
+        .subtitle { color: #666; margin-bottom: 30px; }
+        .section { margin-bottom: 30px; padding: 20px; border: 1px solid #e0e0e0; border-radius: 6px; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; }
+        input[type="text"] { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-family: inherit; }
+        button { background: #0066cc; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 16px; font-weight: bold; }
+        button:hover { background: #0052a3; }
+        button:disabled { background: #cccccc; cursor: not-allowed; }
+        .status { margin-top: 15px; padding: 10px; border-radius: 4px; display: none; }
+        .success { background: #e6f4ea; color: #1e8e3e; border: 1px solid #ceead6; display: block; }
+        .error { background: #fce8e6; color: #d93025; border: 1px solid #fad2cf; display: block; }
+        .info { background: #e8f0fe; color: #1a73e8; border: 1px solid #d2e3fc; display: block; }
+        
+        #answer-section { display: none; margin-top: 20px; }
+        .answer-box { background: #f8f9fa; padding: 20px; border-radius: 4px; border-left: 4px solid #0066cc; margin-bottom: 20px; white-space: pre-wrap; }
+        .sources-box { background: #fff; padding: 15px; border: 1px solid #e0e0e0; border-radius: 4px; }
+        .sources-box ul { margin: 0; padding-left: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>RepoGuide AI</h1>
+        <div class="subtitle">Understand unfamiliar codebases with AI</div>
+
+        <div class="section">
+            <label for="repo-path">Repository</label>
+            <input type="text" id="repo-path" placeholder="C:\...\my-project" value=".">
+            <button id="analyze-btn" onclick="analyzeRepo()">Analyze Repository</button>
+            <div id="analyze-status" class="status"></div>
+        </div>
+
+        <div class="section">
+            <label for="question">Ask a question</label>
+            <input type="text" id="question" placeholder="How does this project use ChromaDB?">
+            <button id="ask-btn" onclick="askQuestion()">Ask RepoGuide</button>
+            <div id="ask-status" class="status"></div>
+            
+            <div id="answer-section">
+                <h3>───────────── Answer ─────────────</h3>
+                <div id="answer-text" class="answer-box"></div>
+                
+                <h3>Sources</h3>
+                <div class="sources-box">
+                    <ul id="sources-list"></ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function analyzeRepo() {
+            const path = document.getElementById('repo-path').value;
+            const statusEl = document.getElementById('analyze-status');
+            const btn = document.getElementById('analyze-btn');
+            
+            if (!path) return;
+            
+            btn.disabled = true;
+            statusEl.className = 'status info';
+            statusEl.innerHTML = 'Analyzing repository... This might take a moment.';
+            
+            try {
+                const res = await fetch('/api/analyze', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({repo_path: path})
+                });
+                
+                const data = await res.json();
+                
+                if (res.ok) {
+                    statusEl.className = 'status success';
+                    statusEl.innerHTML = `✓ Repository analyzed<br>✓ ${data.chunks} chunks indexed`;
+                } else {
+                    statusEl.className = 'status error';
+                    statusEl.innerHTML = `Error: ${data.detail || 'Failed to analyze repository'}`;
+                }
+            } catch (err) {
+                statusEl.className = 'status error';
+                statusEl.innerHTML = `Error: ${err.message}`;
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        async function askQuestion() {
+            const question = document.getElementById('question').value;
+            const statusEl = document.getElementById('ask-status');
+            const btn = document.getElementById('ask-btn');
+            const answerSection = document.getElementById('answer-section');
+            const answerText = document.getElementById('answer-text');
+            const sourcesList = document.getElementById('sources-list');
+            
+            if (!question) return;
+            
+            btn.disabled = true;
+            statusEl.className = 'status info';
+            statusEl.innerHTML = 'Retrieving context and generating answer...';
+            answerSection.style.display = 'none';
+            
+            try {
+                const res = await fetch('/api/ask', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({query: question})
+                });
+                
+                const data = await res.json();
+                
+                if (res.ok) {
+                    statusEl.style.display = 'none';
+                    answerSection.style.display = 'block';
+                    answerText.textContent = data.answer;
+                    
+                    sourcesList.innerHTML = '';
+                    if (data.sources && data.sources.length > 0) {
+                        data.sources.forEach(src => {
+                            const li = document.createElement('li');
+                            li.textContent = src;
+                            sourcesList.appendChild(li);
+                        });
+                    } else {
+                        sourcesList.innerHTML = '<li>No specific sources found</li>';
+                    }
+                } else {
+                    statusEl.className = 'status error';
+                    statusEl.innerHTML = `Error: ${data.detail || 'Failed to get answer'}`;
+                }
+            } catch (err) {
+                statusEl.className = 'status error';
+                statusEl.innerHTML = `Error: ${err.message}`;
+            } finally {
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
